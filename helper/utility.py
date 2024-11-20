@@ -15,7 +15,23 @@ sys.path.append('../../package/helper/')
 from transformation import (
     t2p,
 )
+def euler2quat(euler):
+    """ Convert Euler Angles to Quaternions """
+    euler = np.asarray(euler, dtype=np.float64)
+    assert euler.shape[-1] == 3, "Invalid shape euler {}".format(euler)
 
+    ai, aj, ak = euler[..., 2] / 2, -euler[..., 1] / 2, euler[..., 0] / 2
+    si, sj, sk = np.sin(ai), np.sin(aj), np.sin(ak)
+    ci, cj, ck = np.cos(ai), np.cos(aj), np.cos(ak)
+    cc, cs = ci * ck, ci * sk
+    sc, ss = si * ck, si * sk
+
+    quat = np.empty(euler.shape[:-1] + (4,), dtype=np.float64)
+    quat[..., 0] = cj * cc + sj * ss
+    quat[..., 3] = cj * sc - sj * cs
+    quat[..., 2] = -(cj * ss + sj * cc)
+    quat[..., 1] = cj * cs - sj * sc
+    return quat
 def d2r(deg):
     return np.radians(deg)
 
