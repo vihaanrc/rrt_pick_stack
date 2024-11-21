@@ -53,7 +53,7 @@ def main(sim_path, horizon):
     eef_sid = sim.model.site_name2id("end_effector")
 
     ARM_JNT0 = np.mean(sim.model.jnt_range[:ARM_nJnt], axis=-1)
-
+    print (sim.model.jnt_range[:ARM_nJnt])
     while True:
         # Update targets
         if sim.data.time == 0:
