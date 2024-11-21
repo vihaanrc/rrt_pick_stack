@@ -200,6 +200,8 @@ class MujocoMinimalViewer(MinimalCallbacks):
         self.vopt = mujoco.MjvOption()
         self.cam = mujoco.MjvCamera()
         self.scn = mujoco.MjvScene(self.model, maxgeom=self.maxgeom)
+
+        self.scn.flags[mujoco.mjtRndFlag.mjRND_SHADOW] = 0
         self.pert = mujoco.MjvPerturb()
 
         self.ctx = mujoco.MjrContext(

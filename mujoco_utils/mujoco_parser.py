@@ -244,7 +244,7 @@ class MuJoCoParserClass(object):
         
         if step:
             mujoco.mj_step(self.model,self.data)
-            # mujoco.mj_forward(self.model,self.data) # forward <= is this necessary?
+            mujoco.mj_forward(self.model,self.data) # forward <= is this necessary?
         
         # Reset ticks
         self.tick        = 0
@@ -1496,6 +1496,7 @@ class MuJoCoParserClass(object):
             Example)
             env.step(ctrl=q,ctrl_idxs=idxs_step) # <= HERE
         """
+        #print(self.ctrl_qpos_names)
         return [self.ctrl_qpos_names.index(jname) for jname in joint_names]
     
     def get_qpos(self):
@@ -1561,6 +1562,7 @@ class MuJoCoParserClass(object):
         joint_idxs = self.get_idxs_fwd(joint_names)
         self.data.qpos[joint_idxs] = qpos
         mujoco.mj_forward(self.model,self.data)
+        
 
     def set_ctrl(self,ctrl_names,ctrl,nstep=1):
         """ 
@@ -2116,7 +2118,7 @@ def solve_ik(
         q_init          = None, # IK start from the initial pose
         p_trgt          = None,
         R_trgt          = None,
-        max_ik_tick     = 100,
+        max_ik_tick     = 250, #100
         ik_err_th       = 1e-2,
         restore_state   = True,
         ik_stepsize     = 1.0,
