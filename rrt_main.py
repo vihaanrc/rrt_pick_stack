@@ -436,7 +436,7 @@ def main():
         name      ='RRT-Star-UR',
         point_min = point_min,
         point_max = point_max,
-        goal_select_rate = 0.24,
+        goal_select_rate = 0.45,
         steer_len_max    = np.deg2rad(10),
         search_radius    = np.deg2rad(15), # 10, 30, 50
         norm_ord         = 2, # 2,np.inf,
@@ -446,7 +446,7 @@ def main():
 
     find_rrt_path(RRT=RRT, point_root=point_root, point_goal=point_goal, env=env, joint_names=joint_names, robot_body_names=robot_body_names, obj_body_names=obj_body_names, env_body_names=env_body_names)
     cartesian_coords = render_rrt(env=env, RRT=RRT, joint_names=joint_names, state = state)
-    #visualize_rrt(RRT, interval=10)
+    visualize_rrt(RRT, interval=10)
     plot_rrt(RRT=RRT)
     cylinder_params = {
         'type': 'cylinder',
@@ -467,7 +467,7 @@ def main():
     #print(cartesian_coords)
     # Get the path to goal and visualize the tree with the object
     cartesian_coords = np.array(cartesian_coords)
-    #visualize_rrt_with_objects(rrtcoords=cartesian_coords, ogcoords=ogcoords, object_params_list=object_param_list)
+    visualize_rrt_with_objects(rrtcoords=cartesian_coords, ogcoords=ogcoords, object_params_list=object_param_list)
 
 #rrt.plot_tree()
 
