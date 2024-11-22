@@ -16,8 +16,7 @@ from helper import slider, transformation, utility
 
 from rrt import RapidlyExploringRandomTreesStarClass
 import rrt
-
-def visualize_rrt_with_objects(rrtcoords,ogcoords=None, object_params_list=None):
+def visualize_rrt_with_objects(rrtcoords, ogcoords=None, object_params_list=None):
     '''
         Visualize rrt path with objects to illustrate collision detection.
     '''
@@ -56,60 +55,108 @@ def visualize_rrt_with_objects(rrtcoords,ogcoords=None, object_params_list=None)
 
     plt.show()
 
-def visualize_rrt(RRT, interval=10):
-    '''
-        Visualize rrt tree (potential qpos positions)
-    '''
-    # Initialize the 3D plot
+def visualize_rrt(RRT, env, joint_names, interval=10, obj_params_list=None):
+    """
+    Parameters:
+    - RRT: The RRT structure containing nodes and edges.
+    - env: The simulation environment with forward kinematics functionality.
+    - joint_names: List of joint names for the robot.
+    - interval: Interval for plotting intermediate nodes.
+    """
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
+
     
-    
-    # Extract all nodes
     all_nodes = list(RRT.get_nodes())
-    all_points = np.array([RRT.get_node_point(node) for node in all_nodes])
-    start_point = RRT.get_node_point(0)
+    all_qpos = [RRT.get_node_point(node) for node in all_nodes]
+    
+    # Convert to Cartesian coordinates
+    all_points = []
+    for q_pos in all_qpos:
+        env.forward(q=q_pos, joint_names=joint_names)
+        point = env.get_p_body(body_name='panda0_leftfinger')
+        if point is not None:
+            all_points.append(point)
+        else:
+            all_points.append(None)
+            print("WTF") 
+    
+    all_points = np.array(all_points)
+    start_point = all_points[0]
+    
     # Plot every 'interval' node
-    for i, node in enumerate(all_nodes):
+    for i, point in enumerate(all_points):
+        if point is None:
+            continue  # Skip invalid points
         if i % interval == 0:
-            point = all_points[i]
             ax.scatter(point[0], point[1], point[2], c='blue', s=5, label="Nodes" if i == 0 else "")
     
-    # Highlight the nodes in the path to the goal in red
+    # Highlight path nodes
     node_check = RRT.get_node_nearest(RRT.point_goal)
     path_nodes = [node_check]
-   
+    
     while node_check:
         node_parent = RRT.get_node_parent(node_check)
         path_nodes.append(node_parent)
         node_check = node_parent
     path_nodes.reverse()
     
-    path_points = np.array([RRT.get_node_point(node) for node in path_nodes])
+    path_points = []
+    for node in path_nodes:
+        q_pos = RRT.get_node_point(node)
+        env.forward(q=q_pos, joint_names=joint_names)
+        point = env.get_p_body(body_name='panda0_leftfinger')
+        if point is not None:
+            path_points.append(point)
+    
+    path_points = np.array(path_points)
     ax.scatter(path_points[:, 0], path_points[:, 1], path_points[:, 2], c='red', s=20, label="Path Nodes")
-    ax.scatter(start_point[0], start_point[1], start_point[2], c='purple', marker='o', s=100, label='Start')
+    ax.scatter(start_point[0], start_point[1], start_point[2], c='purple', marker='o', s=100, label="Start")
+
     # Plot edges
     for edge in RRT.get_edges():
-        point_start = RRT.get_node_point(edge[0])
-        point_end = RRT.get_node_point(edge[1])
-        ax.plot([point_start[0], point_end[0]],
-                [point_start[1], point_end[1]],
-                [point_start[2], point_end[2]],
-                c='gray', alpha=0.5)
+        env.forward(q=RRT.get_node_point(edge[0]), joint_names=joint_names)
+        point_start = env.get_p_body(body_name='panda0_leftfinger')
+        env.forward(q=RRT.get_node_point(edge[1]), joint_names=joint_names)
+        point_end = env.get_p_body(body_name='panda0_leftfinger')
+        if point_start is not None and point_end is not None:
+            ax.plot([point_start[0], point_end[0]],
+                    [point_start[1], point_end[1]],
+                    [point_start[2], point_end[2]],
+                    c='gray', alpha=0.5)
+
+    # Plot goal node
+    env.forward(q=RRT.point_goal, joint_names=joint_names)
     
-    # Goal node
-    goal = RRT.point_goal
-    ax.scatter(goal[0], goal[1], goal[2], c='green', s=50, label="Goal")
+    goal_cartesian = env.get_p_body(body_name='panda0_leftfinger')
+    if goal_cartesian is not None:
+        ax.scatter(goal_cartesian[0], goal_cartesian[1], goal_cartesian[2], c='green', s=50, label="Goal")
+
+    for object_params in obj_params_list:
+        if object_params.get("type") == "cylinder":
+            center = np.array(object_params.get("center", [0, 0, 0]))
+            radius = object_params.get("radius", 0.5)
+            height = object_params.get("height", 1)
+
+            # Generate cylinder points
+            z = np.linspace(0, height, 100)  # Start z from 0
+            theta = np.linspace(0, 2 * np.pi, 100)
+            theta, z = np.meshgrid(theta, z)
+            x = center[0] + radius * np.cos(theta)
+            y = center[1] + radius * np.sin(theta)
+            z = center[2] + z
+
+            # Render cylinder as a solid object
+            ax.plot_surface(x, y, z, color="gray", alpha=0.7)
 
     # Plot settings
     ax.set_xlabel("X-axis")
     ax.set_ylabel("Y-axis")
     ax.set_zlabel("Z-axis")
-    ax.set_title("3D Visualization of RRT*")
+    ax.set_title("3D Visualization of RRT in Cartesian Space")
     ax.legend()
-    
-    plt.show()
 
+    plt.show()
 def plot_rrt(RRT, interval=2):
     '''
         plot rrt exploring qpos positions with actual 'path' highlighted
@@ -170,7 +217,7 @@ def visualize_collisions(env, q0, joint_names, robot_body_names, obj_body_names,
 
     for tick in range(100):
         env.step( # dynamic update
-            ctrl        = np.append(q0,[0.04, 0.04]),
+            ctrl        = np.append(q0,[0, 0]),
             joint_names = joint_names+['panda0_finger_joint1', 'panda0_finger_joint2']
         )
 
@@ -208,13 +255,16 @@ def visualize_collisions(env, q0, joint_names, robot_body_names, obj_body_names,
             env.render()
         # Proceed
         if tick < (L-2): tick = tick + 2
-        # if tick == (L-1): tick = 0
+        if (tick >= L-2): 
+            env.close_viewer()
+            break
         
     print ("Done.") 
     return ogcoords
 #end comment here
 
 def find_rrt_path(RRT, point_root, point_goal, env, joint_names, robot_body_names, obj_body_names, env_body_names):
+    
     is_point_feasible = partial(
         rrt.is_qpos_feasible,
         env              = env,
@@ -275,6 +325,11 @@ def find_rrt_path(RRT, point_root, point_goal, env, joint_names, robot_body_name
                         node_min = node_near
             
             # Add 'node_new' and connect it with 'node_min'
+            #env.forward(q=point_new,joint_names=joint_names)
+            #end_effector_pos = env.get_p_body(body_name='panda0_leftfinger')
+            #rrt_coordinates.append(end_effector_pos)
+            
+
             node_new = RRT.add_node(point=point_new,cost=cost_min,node_parent=node_min)
 
             # New node information for rewiring
@@ -307,6 +362,7 @@ def find_rrt_path(RRT, point_root, point_goal, env, joint_names, robot_body_name
         if (RRT.get_dist_to_goal() < 1e-6) and RRT.TERMINATE_WHEN_GOAL_REACHED: break
         
     print ("Done.")
+    
 
 def render_rrt(env, RRT, joint_names, state):
 # ANIMATE RESULTS:
@@ -355,9 +411,11 @@ def render_rrt(env, RRT, joint_names, state):
             env.render()
         # Increase tick
         if tick < (L-2): tick = tick + 2
-
+        if (tick >= L-2): 
+            env.close_viewer()
+            break
     print ("Done.")
-    return cartesian_coords
+    return cartesian_coords, node_list
 
 def main():
     ARM_nJnt = 7
@@ -437,17 +495,18 @@ def main():
         point_min = point_min,
         point_max = point_max,
         goal_select_rate = 0.45,
-        steer_len_max    = np.deg2rad(10),
-        search_radius    = np.deg2rad(15), # 10, 30, 50
+        steer_len_max    = np.deg2rad(30),
+        search_radius    = np.deg2rad(50), # 10, 30, 50
         norm_ord         = 2, # 2,np.inf,
-        n_node_max       = 5000,
+        n_node_max       = 1000,
         TERMINATE_WHEN_GOAL_REACHED = False, SPEED_UP = True,
     )
 
-    find_rrt_path(RRT=RRT, point_root=point_root, point_goal=point_goal, env=env, joint_names=joint_names, robot_body_names=robot_body_names, obj_body_names=obj_body_names, env_body_names=env_body_names)
-    cartesian_coords = render_rrt(env=env, RRT=RRT, joint_names=joint_names, state = state)
-    visualize_rrt(RRT, interval=10)
-    plot_rrt(RRT=RRT)
+    rrt_coordinates  = find_rrt_path(RRT=RRT, point_root=point_root, point_goal=point_goal, env=env, joint_names=joint_names, robot_body_names=robot_body_names, obj_body_names=obj_body_names, env_body_names=env_body_names)
+    cartesian_coords, node_list = render_rrt(env=env, RRT=RRT, joint_names=joint_names, state = state)
+    rrt_coordinates = np.array(rrt_coordinates)
+    
+
     cylinder_params = {
         'type': 'cylinder',
         'center': [-0.1, 1.35, 0],
@@ -467,6 +526,9 @@ def main():
     #print(cartesian_coords)
     # Get the path to goal and visualize the tree with the object
     cartesian_coords = np.array(cartesian_coords)
+    print(str(cartesian_coords[0]) + "first point (robot start)")
+    visualize_rrt(RRT, env=env, joint_names=joint_names, obj_params_list=object_param_list ,interval=5)
+    plot_rrt(RRT=RRT)
     visualize_rrt_with_objects(rrtcoords=cartesian_coords, ogcoords=ogcoords, object_params_list=object_param_list)
 
 #rrt.plot_tree()

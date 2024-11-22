@@ -1,4 +1,4 @@
-import mujoco,glfw,pathlib,imageio,time,yaml,mujoco_viewer
+import mujoco,glfw,pathlib,time
 import numpy as np
 from threading import Lock
 
