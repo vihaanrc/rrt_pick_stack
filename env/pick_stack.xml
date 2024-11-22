@@ -46,7 +46,7 @@
         <body name="obj_cylinder_02" pos="-0.1 1.35 0.0">
             <joint type="free" />
             <inertial pos="0 0 0" mass="0.076" diaginertia="0.0001 0.0001 0.0001" />
-            <geom fromto="0.0 0.0 0.4  0.0 0.0 0.0" size="0.065"
+            <geom fromto="0.0 0.0 0.45  0.0 0.0 0.0" size="0.055"
                 density="500" friction="1 0.005 0.0001" type="cylinder" rgba="0.5 0.56 0.43 1" />
         </body>
         <body name="obj_cylinder_03" pos="-0.35 1.1 0.0">
