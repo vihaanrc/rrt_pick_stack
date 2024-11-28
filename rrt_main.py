@@ -157,7 +157,7 @@ def visualize_rrt(RRT, env, joint_names, interval=10, obj_params_list=None):
     ax.legend()
 
     plt.show()
-def plot_rrt(RRT, interval=2):
+def plot_rrt(RRT, interval=1):
     '''
         plot rrt exploring qpos positions with actual 'path' highlighted
     '''
@@ -255,9 +255,12 @@ def visualize_collisions(env, q0, joint_names, robot_body_names, obj_body_names,
             env.render()
         # Proceed
         if tick < (L-2): tick = tick + 2
-        if (tick >= L-2): 
-            env.close_viewer()
-            break
+        if (tick >= L-2):
+            tick = 0
+        
+        #if (tick >= L-2): 
+         #   env.close_viewer()
+          #  break
         
     print ("Done.") 
     return ogcoords
@@ -325,9 +328,7 @@ def find_rrt_path(RRT, point_root, point_goal, env, joint_names, robot_body_name
                         node_min = node_near
             
             # Add 'node_new' and connect it with 'node_min'
-            #env.forward(q=point_new,joint_names=joint_names)
-            #end_effector_pos = env.get_p_body(body_name='panda0_leftfinger')
-            #rrt_coordinates.append(end_effector_pos)
+           
             
 
             node_new = RRT.add_node(point=point_new,cost=cost_min,node_parent=node_min)
@@ -397,6 +398,8 @@ def render_rrt(env, RRT, joint_names, state):
     env.init_viewer()
     tick = 0
     cartesian_coords = []
+    
+
     while env.is_viewer_alive():
         # Update
         
@@ -411,11 +414,80 @@ def render_rrt(env, RRT, joint_names, state):
             env.render()
         # Increase tick
         if tick < (L-2): tick = tick + 2
-        if (tick >= L-2): 
-            env.close_viewer()
-            break
+        if (tick >= L-2):
+            tick = 0
+        
+        #if (tick >= L-2): 
+         #   env.close_viewer()
+          #  break
     print ("Done.")
     return cartesian_coords, node_list
+
+import time
+
+def move_gripper_with_ik(env, y_displacement, joint_names, orig_cartesian,R0, q0, render=True):
+    """
+    Moves the gripper using IK, opens the gripper, moves it down, closes the gripper, and moves it back up.
+
+    Parameters:
+        env (mujoco_env): The Mujoco environment instance.
+        y_displacement (float): The amount to move in the y-direction.
+        joint_names (list): Names of all joints involved in movement.
+        gripper_joint_names (list): Names of gripper joints.
+        mujoco_parser (module): Module containing the IK solver.
+        p_body_clicked (np.array): Initial body position for IK.
+        cylinder_height (float): Height of the cylinder.
+        R0 (np.array): Target rotation matrix.
+        utility (module): Utility module for smoothing and interpolation.
+        render (bool): Whether to render the environment during the movement.
+    """
+    def execute_trajectory(traj, times, gripper_ctrl):
+        """Executes a given trajectory with gripper control."""
+        for q in traj:
+            env.step(ctrl=np.append(q, gripper_ctrl), joint_names = joint_names+['panda0_finger_joint1', 'panda0_finger_joint2'])
+            if render:
+                env.render()
+
+    # Get initial joint position
+    #q0 = env.data.qpos[:len(joint_names)]
+    env.forward(q=q0,joint_names=joint_names) 
+    # Open gripper
+    open_gripper_ctrl = [0.04, 0.04]  # Hard-coded gripper open
+    closed_gripper_ctrl = [0.0, 0.0]  # Hard-coded gripper close
+
+    # Calculate target positions with IK
+    print(str(q0) + "q0")
+    target_cartesian = orig_cartesian - np.array([0, 0, y_displacement])
+    q_grasp, _, _ = mujoco_parser.solve_ik(
+        env=env,
+        joint_names_for_ik=joint_names,
+        body_name_trgt='panda0_leftfinger',
+        q_init=q0,
+        p_trgt=target_cartesian,
+        R_trgt=R0
+    )
+
+    # Interpolate and smooth the trajectory
+    times, traj_interp, traj_smt, times_anchor = utility.interpolate_and_smooth_nd(
+        anchors=np.vstack([q0, q_grasp]),
+        HZ=env.HZ,
+        vel_limit=np.deg2rad(30),
+        verbose=True
+    )
+    env.init_viewer()
+    # Move down with open gripper
+    execute_trajectory(traj_smt, times, open_gripper_ctrl)
+
+    # Close the gripper
+    env.step(ctrl=np.append(traj_smt[-1], closed_gripper_ctrl))
+    if render:
+        env.render()
+        time.sleep(2)  # Hold the closed gripper for 2 seconds
+
+    # Move back up with closed gripper
+    traj_smt_reverse = np.flip(traj_smt, axis=0)
+    execute_trajectory(traj_smt_reverse, times, closed_gripper_ctrl)
+    env.close_viewer()
 
 def main():
     ARM_nJnt = 7
@@ -446,14 +518,15 @@ def main():
     print(str(body_name_clicked))
 
     # Restore state and solve IKs
-    
     cylinder_height = 0.2
+    target_pos = p_body_clicked + np.array([0,0,0.15+cylinder_height])
+    
     q_grasp,_,_ = mujoco_parser.solve_ik(
         env                = env,
         joint_names_for_ik = joint_names,
         body_name_trgt     = 'panda0_leftfinger',
         q_init             = q0,
-        p_trgt             = p_body_clicked + np.array([0,0,0.15+cylinder_height]),
+        p_trgt             = target_pos,
         R_trgt             = R0,
     )
 
@@ -473,8 +546,11 @@ def main():
     # (optional) exclude 'body_name_clicked' from 'obj_body_names'
     obj_body_names.remove(body_name_clicked)
     
-    ogcoords = visualize_collisions(env=env, q0=q0, joint_names=joint_names, robot_body_names=robot_body_names, obj_body_names=obj_body_names, env_body_names=env_body_names, body_name_clicked=body_name_clicked, times=times, traj_smt=traj_smt)
-    ogcoords = np.array(ogcoords)
+    #ogcoords = visualize_collisions(env=env, q0=q0, joint_names=joint_names, robot_body_names=robot_body_names, obj_body_names=obj_body_names, env_body_names=env_body_names, body_name_clicked=body_name_clicked, times=times, traj_smt=traj_smt)
+    print(q_grasp)
+    
+    move_gripper_with_ik(env, cylinder_height-0.05, joint_names, target_pos, R0, q_grasp)
+    #ogcoords = np.array(ogcoords)
     state = env.get_state()
     joint_limits = np.array([
     [-2.8973,  2.8973],
@@ -488,6 +564,10 @@ def main():
     point_root,point_goal = q0,q_grasp
     point_min = joint_limits[:, 0]  
     point_max = joint_limits[:, 1]
+
+
+
+    
     #point_min = -np.pi*np.ones(len(joint_names))
     #point_max = +np.pi*np.ones(len(joint_names))
     RRT = RapidlyExploringRandomTreesStarClass(
@@ -495,16 +575,18 @@ def main():
         point_min = point_min,
         point_max = point_max,
         goal_select_rate = 0.45,
-        steer_len_max    = np.deg2rad(30),
-        search_radius    = np.deg2rad(50), # 10, 30, 50
+        steer_len_max    = np.deg2rad(25),
+        search_radius    = np.deg2rad(30), # 10, 30, 50
         norm_ord         = 2, # 2,np.inf,
         n_node_max       = 1000,
         TERMINATE_WHEN_GOAL_REACHED = False, SPEED_UP = True,
     )
-
+   
+    state = env.get_state()
     rrt_coordinates  = find_rrt_path(RRT=RRT, point_root=point_root, point_goal=point_goal, env=env, joint_names=joint_names, robot_body_names=robot_body_names, obj_body_names=obj_body_names, env_body_names=env_body_names)
     cartesian_coords, node_list = render_rrt(env=env, RRT=RRT, joint_names=joint_names, state = state)
     rrt_coordinates = np.array(rrt_coordinates)
+    
     
 
     cylinder_params = {
@@ -526,10 +608,10 @@ def main():
     #print(cartesian_coords)
     # Get the path to goal and visualize the tree with the object
     cartesian_coords = np.array(cartesian_coords)
-    print(str(cartesian_coords[0]) + "first point (robot start)")
-    visualize_rrt(RRT, env=env, joint_names=joint_names, obj_params_list=object_param_list ,interval=5)
-    plot_rrt(RRT=RRT)
-    visualize_rrt_with_objects(rrtcoords=cartesian_coords, ogcoords=ogcoords, object_params_list=object_param_list)
+   # print(str(cartesian_coords[0]) + "first point (robot start)")
+    #visualize_rrt(RRT, env=env, joint_names=joint_names, obj_params_list=object_param_list ,interval=2)
+    #plot_rrt(RRT=RRT)
+    #visualize_rrt_with_objects(rrtcoords=cartesian_coords, ogcoords=ogcoords, object_params_list=object_param_list)
 
 #rrt.plot_tree()
 
